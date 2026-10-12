@@ -1,0 +1,10 @@
+{
+  "venvPath": ".",
+  "venv": ".venv",
+  "extraPaths": [
+    "backend"
+  ],
+  "reportCallIssue": "none",
+  "reportGeneralTypeIssues": "none",
+  "reportOptionalSubscript": "none"
+}

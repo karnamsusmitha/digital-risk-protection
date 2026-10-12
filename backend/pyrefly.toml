@@ -1,0 +1,4 @@
+python-interpreter-path = ".venv/Scripts/python.exe"
+search-path = ["."]
+extra-search-path = ["."]
+site-package-path = [".venv/Lib/site-packages"]
