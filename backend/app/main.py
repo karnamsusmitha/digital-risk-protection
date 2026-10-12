@@ -19,6 +19,7 @@ from app.routers import (
     findings,
     analysis,
     dashboard,
+    monitoring,
 )
 
 # ----------------------------------------------------------------------------
@@ -87,6 +88,10 @@ TAGS_METADATA = [
     {
         "name": "Dashboard",
         "description": "Executive dashboard summary metrics, asset counts, threat analysis totals, and recent findings.",
+    },
+    {
+        "name": "Monitoring & Candidate Collection",
+        "description": "URL normalization, candidate asset discovery, sample simulation, and external provider feeds.",
     },
 ]
 
@@ -211,3 +216,5 @@ app.include_router(candidates.router, prefix=settings.API_V1_PREFIX)
 app.include_router(findings.router, prefix=settings.API_V1_PREFIX)
 app.include_router(analysis.router, prefix=settings.API_V1_PREFIX)
 app.include_router(dashboard.router, prefix=settings.API_V1_PREFIX)
+app.include_router(monitoring.router, prefix=settings.API_V1_PREFIX)
+

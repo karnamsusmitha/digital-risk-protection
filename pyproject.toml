@@ -1,0 +1,15 @@
+[project]
+name = "digital-risk-protection"
+version = "1.0.0"
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.pyrefly]
+python-interpreter-path = ".venv/Scripts/python.exe"
+search-path = ["backend"]
+extra-search-path = ["backend"]
+site-package-path = [".venv/Lib/site-packages"]
+
+[tool.pytest.ini_options]
+pythonpath = ["backend"]
+testpaths = ["backend/tests"]

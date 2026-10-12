@@ -1008,5 +1008,173 @@ class DashboardSummaryResponse(BaseModel):
         },
     )
 
+# ============================================================================
+# 8. Brand Impersonation Detection Schemas (Task 2)
+# ============================================================================
+
+class BrandImpersonationDetectRequest(BaseModel):
+    candidate_name: Optional[str] = Field(None, description="Candidate brand name or title to analyze")
+    candidate_domain: Optional[str] = Field(None, description="Candidate domain or URL to analyze")
+    company_id: Optional[int] = Field(None, description="Company ID to compare against registered brand/domain")
+    official_brand_names: Optional[List[str]] = Field(None, description="Explicit list of official brand names to compare against")
+    official_domains: Optional[List[str]] = Field(None, description="Explicit list of official domains to compare against")
+    context_indicators: Optional[List[str]] = Field(default_factory=list, description="Optional telemetry threat indicators")
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "candidate_name": "Acme Bank Portal",
+                "candidate_domain": "https://acme-bank-login.com",
+                "company_id": 1,
+                "context_indicators": ["active_dns"],
+            }
+        }
+    )
+
+
+class BrandImpersonationDetectResponse(BaseModel):
+    candidate_name: Optional[str] = None
+    candidate_domain: Optional[str] = None
+    matched_brand: Optional[str] = None
+    matched_official_domain: Optional[str] = None
+    name_similarity: float = 0.0
+    is_name_lookalike: bool = False
+    is_domain_variation: bool = False
+    variation_types: List[str] = Field(default_factory=list)
+    homoglyphs_detected: List[str] = Field(default_factory=list)
+    is_official_match: bool = False
+    risk_score: float = 0.0
+    severity: str = "LOW"
+    reasons: List[str] = Field(default_factory=list)
+    evidence: Dict[str, Any] = Field(default_factory=dict)
+    remediation_guidance: str = "Continue passive monitoring."
+
+
+# ============================================================================
+# 9. Monitoring & Candidate Asset Collection Schemas (Task 4)
+# ============================================================================
+
+class NormalizedURLInfo(BaseModel):
+    """Structured information extracted from a normalized and validated URL."""
+    raw_url: str = Field(..., description="Original submitted raw URL")
+    normalized_url: str = Field(..., description="Clean canonical normalized URL")
+    scheme: str = Field("https", description="URL scheme (http, https)")
+    host: str = Field(..., description="Cleaned lowercase hostname or domain")
+    path: str = Field("/", description="URL path without tracking parameters")
+    asset_type: str = Field("domain", description="Classified asset type: domain, social_profile, or mobile_app")
+    platform: Optional[str] = Field(None, description="Identified platform (Web, Twitter / X, Google Play, etc.)")
+    is_valid: bool = Field(True, description="Whether URL syntax and structure are valid")
+    validation_error: Optional[str] = Field(None, description="Detailed validation error message if invalid")
+    is_official_match: bool = Field(False, description="Whether host matches a registered official domain")
+    matched_official_domain: Optional[str] = Field(None, description="Official domain that matched, if any")
+
+
+class URLValidationRequest(BaseModel):
+    """Request to normalize, validate, and classify an asset URL."""
+    url: str = Field(..., description="Target URL to inspect and normalize")
+    company_id: Optional[int] = Field(None, description="Optional company ID to check against official domains")
+    official_domains: Optional[List[str]] = Field(None, description="Optional list of official domains to compare against")
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "url": "https://twitter.com/acme_security_help?utm_source=twitter&ref=feed",
+                "company_id": 1,
+            }
+        }
+    )
+
+
+class URLValidationResponse(BaseModel):
+    """Response containing URL validation, normalization, and classification results."""
+    url_info: NormalizedURLInfo
+    is_valid: bool
+    asset_type: str
+    platform: Optional[str] = None
+    is_official_match: bool = False
+    matched_official_domain: Optional[str] = None
+    reasons: List[str] = Field(default_factory=list)
+
+
+class CollectedCandidateRecord(BaseModel):
+    """Individual candidate threat asset discovered or collected by monitoring."""
+    url: str = Field(..., description="Validated and normalized target URL")
+    asset_type: str = Field(..., description="Asset type: domain, social_profile, or mobile_app")
+    platform: str = Field("Web", description="Observed discovery platform")
+    source: str = Field("MONITORING_COLLECTOR", description="Detection source feed or worker")
+    confidence_score: float = Field(0.75, ge=0.0, le=1.0, description="Collection confidence rating")
+    is_official_match: bool = Field(False, description="Whether asset matches registered official domain")
+    matched_official_domain: Optional[str] = Field(None, description="Official domain matched, if any")
+    evidence: Dict[str, Any] = Field(default_factory=dict, description="Technical metadata, DNS, and discovery telemetry")
+    observation_time: str = Field(..., description="ISO 8601 UTC timestamp of observation")
+    candidate_id: Optional[int] = Field(None, description="Database ID if persisted as a Candidate record")
+    company_id: Optional[int] = Field(None, description="Associated company ID")
+    is_live_monitoring: bool = Field(False, description="True ONLY when real live provider data is active")
+    monitoring_mode: str = Field("simulated_sample", description="'live_provider' or 'simulated_sample'")
+    notice: Optional[str] = Field(None, description="Disclaimers regarding data source authenticity")
+
+
+class MonitoringCollectionRequest(BaseModel):
+    """Request to execute candidate asset collection for an organization."""
+    company_id: Optional[int] = Field(None, description="Monitored company ID")
+    query_domain: Optional[str] = Field(None, description="Target official domain to monitor (e.g. acme.com)")
+    brand_name: Optional[str] = Field(None, description="Monitored brand name (e.g. Acme Corp)")
+    asset_types: Optional[List[str]] = Field(None, description="Asset types to collect (domain, social_profile, mobile_app)")
+    submitted_urls: Optional[List[str]] = Field(None, description="Explicit candidate URLs to normalize and ingest")
+    use_live_providers: bool = Field(False, description="Whether to attempt live third-party / CT log APIs")
+    persist_to_database: bool = Field(False, description="Whether to persist collected candidates into SQLite database")
+    limit: int = Field(10, ge=1, le=100, description="Maximum number of candidates to return")
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "company_id": 1,
+                "asset_types": ["domain", "social_profile", "mobile_app"],
+                "persist_to_database": True,
+                "limit": 10,
+            }
+        }
+    )
+
+
+class MonitoringCollectionResponse(BaseModel):
+    """Response containing collected candidates, source disclaimers, and metadata."""
+    company_id: Optional[int] = None
+    company_name: Optional[str] = None
+    query_domain: Optional[str] = None
+    total_collected: int = 0
+    persisted_count: int = 0
+    candidates: List[CollectedCandidateRecord] = Field(default_factory=list)
+    is_live_monitoring: bool = Field(False, description="Explicit guarantee: False when using sample data")
+    monitoring_mode: str = Field("simulated_sample", description="'live_provider' or 'simulated_sample'")
+    disclaimer: str = Field(
+        "Sample monitoring data provided for offline/demonstration use. Live monitoring is NOT active without configured provider credentials.",
+        description="Requirement 9 truth-in-labeling notice",
+    )
+    errors: List[str] = Field(default_factory=list, description="Non-fatal warnings or provider error notices")
+
+
+class MonitoringStatusResponse(BaseModel):
+    """Status diagnostic response for the monitoring module."""
+    service_status: str = "operational"
+    is_live_monitoring_configured: bool = False
+    configured_provider_url: Optional[str] = None
+    request_timeout_seconds: float = 3.0
+    supported_asset_types: List[str] = Field(
+        default_factory=lambda: ["domain", "social_profile", "mobile_app"]
+    )
+    supported_platforms: List[str] = Field(
+        default_factory=lambda: [
+            "Web",
+            "Twitter / X",
+            "LinkedIn",
+            "Instagram",
+            "Facebook",
+            "Telegram",
+            "Google Play",
+            "Apple App Store",
+        ]
+    )
+    notice: str = "Live monitoring requires configured MONITORING_MODULE_URL. Fallback sample data is active."
 
 

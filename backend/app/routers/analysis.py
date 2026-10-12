@@ -12,7 +12,10 @@ from app.schemas import (
     AnalyzeRequest,
     AnalyzeResponse,
     FindingResponse,
+    BrandImpersonationDetectRequest,
+    BrandImpersonationDetectResponse,
 )
+from typing import List
 from app.services.risk_scoring import (
     recalculate_company_risk,
     evaluate_candidate_signal,
@@ -156,6 +159,75 @@ def analyze_threat(
         company=company,
         request=request,
         db=db,
+    )
+
+
+@router.post("/analysis/detect-brand-impersonation", response_model=BrandImpersonationDetectResponse)
+@router.post("/analysis/impersonation", response_model=BrandImpersonationDetectResponse, include_in_schema=False)
+@router.post("/detect-impersonation", response_model=BrandImpersonationDetectResponse, include_in_schema=False)
+def detect_brand_impersonation_endpoint(
+    request: BrandImpersonationDetectRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Dedicated AI-based & deterministic brand impersonation detector:
+    - Compares candidate brand names against registered official brands.
+    - Detects look-alike names using text normalization, edit distance, and homoglyphs.
+    - Identifies suspicious domain variations: typosquatting, combosquatting, deceptive subdomains, TLD swaps.
+    - Returns explainable risk score (0 to 100) with detailed reasons.
+    - Guaranteed: Does not classify an asset as malicious based only on name similarity.
+    """
+    official_brands: List[str] = list(request.official_brand_names or [])
+    official_domains: List[str] = list(request.official_domains or [])
+
+    if request.company_id:
+        company = db.query(Company).filter(Company.id == request.company_id).first()
+        if not company:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Company with ID {request.company_id} not found.",
+            )
+        if company.name and company.name not in official_brands:
+            official_brands.append(company.name)
+        if company.domain and company.domain not in official_domains:
+            official_domains.append(company.domain)
+
+        official_assets = getattr(company, "protected_assets", []) or getattr(company, "assets", []) or []
+        for asset in official_assets:
+            atype = str(getattr(asset, "asset_type", "")).lower()
+            val = getattr(asset, "value", None)
+            if val:
+                if atype == "brand_name" and val not in official_brands:
+                    official_brands.append(val)
+                elif atype == "domain" and val not in official_domains:
+                    official_domains.append(val)
+
+    from app.services.brand_detection import evaluate_brand_impersonation
+
+    result = evaluate_brand_impersonation(
+        candidate_name=request.candidate_name,
+        candidate_domain=request.candidate_domain,
+        official_brand_names=official_brands,
+        official_domains=official_domains,
+        context_indicators=request.context_indicators,
+    )
+
+    return BrandImpersonationDetectResponse(
+        candidate_name=result.candidate_name,
+        candidate_domain=result.candidate_domain,
+        matched_brand=result.matched_brand,
+        matched_official_domain=result.matched_official_domain,
+        name_similarity=result.name_similarity,
+        is_name_lookalike=result.is_name_lookalike,
+        is_domain_variation=result.is_domain_variation,
+        variation_types=result.variation_types,
+        homoglyphs_detected=result.homoglyphs_detected,
+        is_official_match=result.is_official_match,
+        risk_score=result.risk_score,
+        severity=result.severity,
+        reasons=result.reasons,
+        evidence=result.evidence,
+        remediation_guidance=result.remediation_guidance,
     )
 
 
